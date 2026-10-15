@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>끼니 영양 장부</title>
+<meta name="theme-color" content="#26457A">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* Layout: 날짜·검색 헤더 → 하루 합계 장부 → 아침/점심/저녁 세 칸(좁으면 세로로 쌓임) */
+:root {
+  --bg: #F3F6F4;
+  --surface: #FFFFFF;
+  --sunk: #E9EEEB;
+  --ink: #1B2420;
+  --muted: #5E6B65;
+  --line: #D8E0DB;
+  --accent: #26457A;
+  --accent-ink: #FFFFFF;
+  --protein: #C2415D;
+  --fat: #B07F12;
+  --fiber: #3A8752;
+  --ok: #2F7D4A;
+  --low: #B05A06;
+  --over: #B3261E;
+  --band: rgba(38, 69, 122, 0.10);
+  --shadow: 0 1px 2px rgba(20, 35, 30, .06), 0 8px 24px rgba(20, 35, 30, .06);
+  --font-display: "Gowun Batang", "Nanum Myeongjo", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111715; --surface: #19211E; --sunk: #222B27; --ink: #E5ECE8; --muted: #9AA8A1; --line: #2D3833;
+    --accent: #93B2E8; --accent-ink: #0F1A2E; --protein: #EC7A92; --fat: #E2B64C; --fiber: #6DC48A;
+    --ok: #6DC48A; --low: #EBA35C; --over: #F38A80; --band: rgba(147, 178, 232, 0.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.3); color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(48px + env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+h1 { font-family: var(--font-display); font-size: 1.9rem; line-height: 1.15; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { color: var(--muted); margin: 4px 0 0; font-size: .9rem; }
+.datenav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.datenav .d { font-weight: 600; min-width: 9.5em; text-align: center; }
+.iconbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 34px; height: 34px; display: grid; place-items: center; }
+.iconbtn:hover { border-color: var(--accent); }
+.textbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 5px 10px; font-size: .85rem; }
+.textbtn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* sync panel */
+.sync { background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+.sync h2 { font-family: var(--font-display); font-size: 1.15rem; margin: 0 0 6px; }
+.sync p { margin: 0 0 8px; color: var(--muted); font-size: .9rem; max-width: 60ch; }
+.qr { background: #FFFFFF; padding: 8px; border-radius: 8px; width: 176px; height: 176px; }
+.qr img, .qr canvas { display: block; width: 160px; height: 160px; }
+.linkbox { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.linkbox input { flex: 1 1 240px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-family: var(--font-num); font-size: .8rem; background: var(--sunk); color: var(--ink); }
+.warn { font-size: .82rem; color: var(--low); }
+
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.day { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.day[aria-current="date"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.day .wd { font-size: .72rem; color: var(--muted); }
+.day .dn { font-family: var(--font-num); font-size: .9rem; }
+.minibars { display: flex; gap: 3px; height: 26px; align-items: end; }
+.minibars i { width: 6px; background: var(--sunk); border-radius: 2px; position: relative; height: 100%; overflow: hidden; }
+.minibars i b { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px; }
+
+.search { position: relative; }
+.searchbox { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 4px 6px 4px 14px; box-shadow: var(--shadow); }
+.searchbox:focus-within { border-color: var(--accent); }
+.searchbox input { flex: 1; min-width: 0; border: 0; background: transparent; font: inherit; font-size: 1.05rem; padding: 10px 0; color: var(--ink); outline: none; }
+.results { margin-top: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.res { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); }
+.res:first-child { border-top: 0; }
+.res .name { font-weight: 600; }
+.serv { color: var(--muted); font-size: .82rem; font-weight: 400; }
+.macros { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .85rem; margin-top: 2px; }
+.m { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.m::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; align-self: center; }
+.m.p { color: var(--protein); } .m.f { color: var(--fat); } .m.b { color: var(--fiber); }
+.m span { color: var(--ink); }
+.addto { display: flex; gap: 6px; flex-wrap: wrap; }
+.addto button { border: 1px solid var(--line); background: var(--sunk); border-radius: 8px; padding: 6px 10px; font-size: .85rem; font-weight: 500; }
+.addto button:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.empty-res { padding: 14px; color: var(--muted); font-size: .9rem; }
+.linkbtn { background: none; border: 0; color: var(--accent); text-decoration: underline; padding: 0; font-weight: 500; }
+.custom { display: grid; grid-template-columns: 2fr 1.4fr repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--sunk); align-items: end; }
+.custom label { display: flex; flex-direction: column; gap: 3px; font-size: .75rem; color: var(--muted); min-width: 0; }
+.custom input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; font-size: .9rem; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+.custom .row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.custom .hint { font-size: .78rem; color: var(--muted); }
+
+.quick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.quick .lbl { font-size: .78rem; color: var(--muted); letter-spacing: .04em; margin-right: 4px; }
+.chip { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 4px 11px; font-size: .84rem; }
+.chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); }
+
+.ledger { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px 32px; }
+.ledger h2, .meal h2 { font-family: var(--font-display); font-size: 1.25rem; margin: 0; }
+.eyebrow { font-size: .74rem; letter-spacing: .08em; color: var(--muted); }
+.need { border-left: 1px solid var(--line); padding-left: 24px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.need p { margin: 0; color: var(--muted); font-size: .9rem; }
+.needrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.needcell { flex: 1 1 90px; background: var(--sunk); border-radius: 10px; padding: 8px 10px; }
+.needcell .k { font-size: .76rem; color: var(--muted); }
+.needcell .v { font-family: var(--font-num); font-size: 1.15rem; }
+.needcell.done .v { color: var(--ok); }
+
+.bars { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.bar { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.bar .lab { font-size: .85rem; font-weight: 500; }
+.track { position: relative; height: 12px; background: var(--sunk); border-radius: 6px; overflow: hidden; }
+.track .band { position: absolute; top: 0; bottom: 0; background: var(--band); border-left: 2px solid var(--accent); }
+.track .fill { position: absolute; left: 0; top: 2px; bottom: 2px; border-radius: 4px; transition: width .3s ease; }
+.bar .val { font-family: var(--font-num); font-size: .85rem; white-space: nowrap; text-align: right; min-width: 7.5em; }
+.bar .val small { color: var(--muted); }
+.pill { font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; font-family: var(--font-body); }
+.pill.ok { color: var(--ok); } .pill.low { color: var(--low); } .pill.over { color: var(--over); } .pill.none { color: var(--muted); }
+
+.meals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.meal { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.meal header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.meal .goal { font-size: .76rem; color: var(--muted); }
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.item .nm { font-weight: 500; font-size: .92rem; overflow-wrap: anywhere; }
+.item .macros { grid-column: 1 / -1; font-size: .8rem; }
+.ctrl { display: flex; align-items: center; gap: 4px; }
+.ctrl button { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--sunk); line-height: 1; font-size: .9rem; display: grid; place-items: center; }
+.ctrl .q { font-family: var(--font-num); font-size: .8rem; min-width: 3.2em; text-align: center; }
+.gwrap { display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; color: var(--muted); }
+.gin { width: 4.2em; border: 1px solid var(--line); border-radius: 6px; padding: 3px 5px; text-align: right; font-size: .82rem; background: var(--surface); color: var(--ink); -moz-appearance: textfield; }
+.gin::-webkit-outer-spin-button, .gin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ctrl .rm { margin-left: 4px; color: var(--muted); }
+.ctrl .rm:hover { color: var(--over); border-color: var(--over); }
+.emptymeal { color: var(--muted); font-size: .88rem; padding: 14px 12px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
+.mealnote { font-size: .8rem; color: var(--muted); margin: 0; }
+
+footer { color: var(--muted); font-size: .8rem; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 10px; font-size: .88rem; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+
+@media (max-width: 860px) {
+  .meals { grid-template-columns: minmax(0, 1fr); }
+  .ledger { grid-template-columns: minmax(0, 1fr); }
+  .need { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 16px; }
+}
+@media (max-width: 560px) {
+  h1 { font-size: 1.55rem; }
+  .res { grid-template-columns: minmax(0, 1fr); }
+  .custom { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .custom label.wide { grid-column: span 2; }
+  .bar { grid-template-columns: 3.6em minmax(0, 1fr); }
+  .bar .val { grid-column: 2; text-align: left; }
+  .ledger { padding: 16px; }
+  .sync { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .track .fill { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>끼니 영양 장부</h1>
+      <p class="sub">한 끼 목표 · 단백질 25g · 지방 15–16g · 식이섬유 8–9g</p>
+    </div>
+    <div class="datenav">
+      <button class="iconbtn" id="prevDay" aria-label="전날">‹</button>
+      <span class="d" id="dateLabel"></span>
+      <button class="iconbtn" id="nextDay" aria-label="다음날">›</button>
+      <button class="textbtn" id="todayBtn">오늘</button>
+      <button class="textbtn primary" id="syncBtn">다른 기기 연결</button>
+    </div>
+  </header>
+
+  <section class="sync" id="syncPanel" hidden>
+    <div class="qr" id="qr" aria-label="연결 링크 QR 코드"></div>
+    <div style="min-width:0">
+      <h2>폰에서 같은 기록 보기</h2>
+      <p>폰 카메라로 QR 코드를 찍거나, 아래 링크를 폰으로 보내서 열어 주세요. 한 번 열면 그 기기에도 연결이 기억돼요. 홈 화면에 추가해 두면 앱처럼 쓸 수 있어요.</p>
+      <div class="linkbox">
+        <input id="syncLink" readonly aria-label="연결 링크">
+        <button class="textbtn" id="copyLink">링크 복사</button>
+      </div>
+      <p class="warn">이 링크가 곧 비밀번호예요. 링크를 아는 사람은 기록을 보고 고칠 수 있으니 남에게 보내지 마세요.</p>
+    </div>
+  </section>
+
+  <nav class="week" id="week" aria-label="최근 7일"></nav>
+
+  <section class="search">
+    <div class="searchbox">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="color:var(--muted)"><circle cx="11" cy="11" r="7" fill="none"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" type="search" placeholder="음식 검색 (예: 연어, 현미밥, 두부)" autocomplete="off" aria-label="음식 검색">
+    </div>
+    <div class="results" id="results" hidden></div>
+  </section>
+
+  <div class="quick" id="quick"></div>
+
+  <section class="ledger" aria-label="하루 합계">
+    <div>
+      <div class="eyebrow">하루 합계</div>
+      <h2 id="dayTitle">오늘 먹은 것</h2>
+      <div class="bars" id="dayBars"></div>
+    </div>
+    <div class="need">
+      <div class="eyebrow">남은 끼니에서 채울 양</div>
+      <p id="needText"></p>
+      <div class="needrow" id="needRow"></div>
+    </div>
+  </section>
+
+  <section class="meals" id="meals"></section>
+
+  <footer>
+    <span>수치는 일반적인 1회 제공량 기준 추정치예요. 포장 제품은 영양성분표를 보고 직접 추가하세요.</span>
+    <span id="storeNote">연결 중…</span>
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script type="module">
+const firebaseConfig = {
+  apiKey: "AIzaSyBS2n-0XJYFhPj8sL03BYsKmQSj7IUGdaU",
+  authDomain: "nutrition-checklist.firebaseapp.com",
+  projectId: "nutrition-checklist",
+  storageBucket: "nutrition-checklist.firebasestorage.app",
+  messagingSenderId: "369091871626",
+  appId: "1:369091871626:web:265b0bf3e79d2528f7be73",
+};
+const FB = "https://www.gstatic.com/firebasejs/10.12.2/";
+
+const MEALS = [
+  { key: "breakfast", label: "아침" },
+  { key: "lunch", label: "점심" },
+  { key: "dinner", label: "저녁" },
+];
+const NUT = [
+  { key: "p", label: "단백질", lo: 25, hi: 25, overOk: true },
+  { key: "f", label: "지방", lo: 15, hi: 16, overOk: false },
+  { key: "b", label: "식이섬유", lo: 8, hi: 9, overOk: true },
+];
+const NUT_COLOR = { p: "var(--protein)", f: "var(--fat)", b: "var(--fiber)" };
+
+// [이름, 1회 제공량, 그 제공량의 무게 g, 단백질 g, 지방 g, 식이섬유 g, 검색어, 아침단골]
+// 무게가 "약"인 것(계란 요리·찌개·1인분 등)은 일반적인 1회분을 어림한 값
+const FOODS = [
+  ["블루베리", "1컵", 150, 1.1, 0.5, 3.6, "베리 berry", 1],
+  ["대추방울토마토", "10알", 150, 1.4, 0.3, 1.8, "토마토 방울토마토", 1],
+  ["사과 반쪽", "½개", 130, 0.3, 0.2, 3.1, "사과 apple", 1],
+  ["닭가슴살", "1팩", 100, 27, 1.5, 0, "닭 chicken", 1],
+  ["스크램블 에그 (올리브오일)", "계란 2개 + 오일 1작은술", 105, 12.6, 14.5, 0, "계란 달걀 스크램블 egg", 1],
+  ["계란찜", "계란 2개", 150, 12.5, 9.6, 0, "계란 달걀 찜", 1],
+  ["골드키위", "1개", 100, 1.0, 0.3, 1.4, "키위 kiwi", 1],
+  ["그린키위", "1개", 100, 1.1, 0.5, 3.0, "키위 kiwi"],
+  ["바나나", "1개", 120, 1.3, 0.4, 3.1, "banana"],
+  ["삶은 달걀", "1개", 50, 6.3, 4.8, 0, "계란 달걀 egg"],
+  ["그릭요거트 (플레인)", "1컵", 100, 9.5, 4.5, 0, "요거트 요구르트"],
+  ["아몬드", "20알", 23, 4.9, 11.5, 2.9, "견과"],
+  ["호두", "3알", 15, 2.3, 9.8, 1.0, "견과"],
+  ["치아시드", "1큰술", 12, 2.0, 3.7, 4.1, "씨앗 치아씨드"],
+  ["오트밀", "½컵", 40, 5.3, 2.8, 4.0, "귀리 오트"],
+  ["통밀식빵", "1장", 35, 4.4, 1.2, 2.4, "빵 식빵"],
+  ["아보카도", "½개", 70, 1.4, 10.3, 4.7, ""],
+  ["현미밥", "1공기", 210, 5.7, 1.9, 3.6, "밥 쌀"],
+  ["잡곡밥", "1공기", 210, 6.1, 1.3, 2.9, "밥 쌀"],
+  ["흰쌀밥", "1공기", 210, 5.3, 0.6, 0.6, "밥 쌀 백미"],
+  ["고구마", "1개", 150, 2.1, 0.2, 4.5, ""],
+  ["단호박", "1조각", 100, 1.5, 0.1, 2.7, "호박"],
+  ["브로콜리", "1접시", 100, 2.8, 0.4, 2.6, "채소"],
+  ["양배추", "1접시", 100, 1.3, 0.1, 2.5, "채소"],
+  ["방울양배추", "1접시", 100, 3.4, 0.3, 3.8, "채소"],
+  ["파프리카", "1개", 150, 1.5, 0.5, 3.0, "채소 피망"],
+  ["당근", "½개", 75, 0.7, 0.2, 2.1, "채소"],
+  ["오이", "1개", 200, 1.3, 0.2, 1.0, "채소"],
+  ["샐러드 채소", "1접시", 80, 1.2, 0.2, 1.6, "양상추 샐러드 채소"],
+  ["시금치나물", "1접시", 70, 2.2, 2.4, 1.9, "나물 반찬"],
+  ["콩나물무침", "1접시", 70, 2.4, 1.5, 1.7, "나물 반찬"],
+  ["미역줄기볶음", "1접시", 60, 0.8, 2.9, 1.8, "미역 반찬"],
+  ["버섯볶음", "1접시", 80, 2.5, 3.6, 2.4, "버섯 반찬"],
+  ["배추김치", "1접시", 50, 0.9, 0.3, 1.2, "김치 반찬"],
+  ["두부", "½모", 150, 13.0, 7.2, 0.6, "두부 콩"],
+  ["낫토", "1팩", 45, 7.4, 4.5, 3.0, "콩"],
+  ["렌틸콩 (삶은)", "½컵", 100, 9.0, 0.4, 7.9, "콩"],
+  ["병아리콩 (삶은)", "½컵", 100, 8.9, 2.6, 7.6, "콩"],
+  ["연어구이", "1토막", 100, 22.0, 12.0, 0, "생선 연어"],
+  ["고등어구이", "1토막", 100, 20.0, 15.0, 0, "생선"],
+  ["참치캔 (라이트)", "1캔", 100, 20.0, 2.5, 0, "참치 생선"],
+  ["소고기 우둔", "1인분", 100, 22.0, 5.0, 0, "소고기 쇠고기"],
+  ["돼지 안심", "1인분", 100, 22.0, 3.5, 0, "돼지고기"],
+  ["삼겹살", "1인분", 100, 17.0, 28.0, 0, "돼지고기"],
+  ["닭다리살", "1인분", 100, 18.0, 10.0, 0, "닭"],
+  ["닭가슴살 샐러드", "1인분", 250, 28.0, 9.0, 4.5, "샐러드 닭"],
+  ["순두부찌개", "1그릇", 400, 14.0, 12.0, 2.0, "찌개 두부"],
+  ["된장찌개", "1그릇", 300, 9.0, 5.0, 3.5, "찌개 된장"],
+  ["미역국", "1그릇", 300, 5.0, 4.0, 1.5, "국 미역"],
+  ["비빔밥", "1그릇", 450, 17.0, 14.0, 5.0, "밥"],
+  ["제육볶음", "1인분", 200, 25.0, 20.0, 2.0, "돼지"],
+  ["김밥", "1줄", 230, 10.0, 9.0, 3.0, ""],
+  ["우유", "1팩 (200ml)", 200, 6.4, 7.0, 0, "milk"],
+  ["두유 (무가당)", "1팩 (190ml)", 190, 6.5, 3.8, 0.6, "콩"],
+  ["프로틴 쉐이크", "1스쿱", 30, 24.0, 1.5, 1.0, "단백질 보충제 프로틴"],
+  ["올리브오일", "1큰술", 13, 0, 13.5, 0, "오일 기름"],
+].map(([n, s, g, p, f, b, k, fav]) => ({ n, s: `${s} (${g}g)`, g, p, f, b, k: k || "", fav: !!fav }));
+
+const $ = (id) => document.getElementById(id);
+const r1 = (x) => Math.round(x * 10) / 10;
+const fmt = (x) => { const v = r1(x); return Number.isInteger(v) ? String(v) : v.toFixed(1); };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parseYmd = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const shift = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const WD = ["일", "월", "화", "수", "목", "금", "토"];
+const emptyMeals = () => ({ breakfast: [], lunch: [], dinner: [] });
+const clone = (x) => (x ? JSON.parse(JSON.stringify(x)) : x);
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+
+/* ---------- 동기화 코드: 주소 # 뒤에 붙는 비밀 코드 ---------- */
+const CODE_RE = /^[A-Za-z0-9]{20,64}$/;
+function newCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const a = new Uint32Array(24);
+  crypto.getRandomValues(a);
+  return Array.from(a, (x) => chars[x % chars.length]).join("");
+}
+function resolveCode() {
+  const fromHash = location.hash.slice(1);
+  if (CODE_RE.test(fromHash)) { lsSet("mm:code", fromHash); return fromHash; }
+  let code = lsGet("mm:code");
+  if (!code || !CODE_RE.test(code)) { code = newCode(); lsSet("mm:code", code); }
+  history.replaceState(null, "", location.pathname + location.search + "#" + code);
+  return code;
+}
+const CODE = resolveCode();
+window.addEventListener("hashchange", () => {
+  const h = location.hash.slice(1);
+  if (CODE_RE.test(h) && h !== CODE) { lsSet("mm:code", h); location.reload(); }
+});
+
+const state = {
+  date: ymd(new Date()),
+  meals: emptyMeals(),
+  custom: [],
+  days: {},
+  showCustom: false,
+};
+
+/* ---------- 저장소 ---------- */
+// Firebase에 못 붙으면 이 브라우저에만 저장
+const localStore = {
+  name: "이 기기에만 저장 중 (인터넷 연결을 확인하세요)",
+  subscribe(onDays, onCustom) {
+    const out = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith("mm:day:")) out[k.slice(7)] = JSON.parse(localStorage.getItem(k));
+      }
+    } catch (e) {}
+    onDays(out, true);
+    try { onCustom(JSON.parse(lsGet("mm:custom") || "[]")); } catch (e) { onCustom([]); }
+  },
+  async saveDay(date, meals) { lsSet("mm:day:" + date, JSON.stringify(meals)); },
+  async saveCustom(items) { lsSet("mm:custom", JSON.stringify(items)); },
+};
+
+async function makeFirebaseStore() {
+  const { initializeApp } = await import(FB + "firebase-app.js");
+  const fs = await import(FB + "firebase-firestore.js");
+  const app = initializeApp(firebaseConfig);
+  let db;
+  try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache() }); }
+  catch (e) { db = fs.getFirestore(app); }
+  const daysCol = fs.collection(db, "logs", CODE, "days");
+  const customDoc = fs.doc(db, "logs", CODE, "meta", "custom");
+  return {
+    name: "자동 저장 · 모든 기기에 동기화",
+    subscribe(onDays, onCustom, onError) {
+      fs.onSnapshot(daysCol, (snap) => {
+        const out = {};
+        snap.docs.forEach((d) => { const v = d.data(); if (v && v.meals) out[d.id] = v.meals; });
+        onDays(out, !snap.metadata.hasPendingWrites);
+      }, onError);
+      fs.onSnapshot(customDoc, (snap) => onCustom((snap.exists() && snap.data().items) || []), onError);
+    },
+    async saveDay(date, meals) { await fs.setDoc(fs.doc(daysCol, date), { meals, updatedAt: fs.serverTimestamp() }); },
+    async saveCustom(items) { await fs.setDoc(customDoc, { items }); },
+  };
+}
+
+let store = localStore;
+
+function onDays(days, fromServer) {
+  state.days = days;
+  // 내가 지금 고치는 중이 아니면 다른 기기의 변경을 반영
+  if (!pendingSave && !saving) state.meals = clone(state.days[state.date]) || emptyMeals();
+  renderWeek(); renderLedger(); renderMeals();
+}
+function onCustom(items) { state.custom = Array.isArray(items) ? items : []; renderResults(); }
+function onError(err) {
+  console.error(err);
+  $("storeNote").textContent = err && err.code === "permission-denied"
+    ? "저장소 권한 오류: Firestore 보안 규칙을 확인하세요"
+    : "동기화 오류: 인터넷 연결을 확인하세요";
+}
+
+async function initStore() {
+  try {
+    store = await makeFirebaseStore();
+  } catch (e) {
+    console.error(e);
+    store = localStore;
+  }
+  $("storeNote").textContent = store.name;
+  store.subscribe(onDays, onCustom, onError);
+}
+
+let pendingSave = null, saveTimer = null, saving = false;
+function scheduleSave() {
+  state.days[state.date] = clone(state.meals);
+  pendingSave = { date: state.date, meals: clone(state.meals) };
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 500);
+}
+async function flushSave() {
+  clearTimeout(saveTimer);
+  if (saving || !pendingSave) return;
+  saving = true;
+  const job = pendingSave; pendingSave = null;
+  try { await store.saveDay(job.date, job.meals); }
+  catch (e) { console.error(e); toast("저장하지 못했어요. 인터넷 연결을 확인해 주세요."); }
+  saving = false;
+  if (pendingSave) flushSave();
+}
+
+/* ---------- 계산 ---------- */
+function sumItems(items) {
+  return items.reduce((a, it) => ({ p: a.p + it.p * it.qty, f: a.f + it.f * it.qty, b: a.b + it.b * it.qty }), { p: 0, f: 0, b: 0 });
+}
+function status(v, lo, hi, overOk, hasAny) {
+  if (!hasAny) return { cls: "none", txt: "기록 없음" };
+  if (v < lo * 0.9) return { cls: "low", txt: "부족" };
+  if (v < lo) return { cls: "low", txt: "조금 부족" };
+  if (v <= hi * 1.1) return { cls: "ok", txt: "적정" };
+  return overOk ? { cls: "ok", txt: "충분" } : { cls: "over", txt: "초과" };
+}
+function barHTML(n, v, lo, hi, hasAny) {
+  const max = Math.max(hi * 1.6, v * 1.05);
+  const st = status(v, lo, hi, n.overOk, hasAny);
+  const target = lo === hi ? `${fmt(lo)}g` : `${fmt(lo)}–${fmt(hi)}g`;
+  const bandW = Math.max(((hi - lo) / max) * 100, 0.6);
+  return `<div class="bar">
+    <span class="lab" style="color:${NUT_COLOR[n.key]}">${n.label}</span>
+    <div class="track" role="img" aria-label="${n.label} ${fmt(v)}g, 목표 ${target}">
+      <div class="band" style="left:${(lo / max) * 100}%;width:${bandW}%"></div>
+      <div class="fill" style="width:${Math.min((v / max) * 100, 100)}%;background:${NUT_COLOR[n.key]}"></div>
+    </div>
+    <span class="val"><span class="pill ${st.cls}">${st.txt}</span> ${fmt(v)}<small> / ${target}</small></span>
+  </div>`;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const macroHTML = (o, q = 1) =>
+  `<span class="macros num"><span class="m p"><span>${fmt(o.p * q)}</span></span><span class="m f"><span>${fmt(o.f * q)}</span></span><span class="m b"><span>${fmt(o.b * q)}</span></span></span>`;
+const macroLabeled = (o) =>
+  `<span class="macros"><span class="m p">단백질 <span class="num">${fmt(o.p)}g</span></span><span class="m f">지방 <span class="num">${fmt(o.f)}g</span></span><span class="m b">식이섬유 <span class="num">${fmt(o.b)}g</span></span></span>`;
+
+/* ---------- 렌더 ---------- */
+function renderDate() {
+  const d = parseYmd(state.date);
+  const isToday = state.date === ymd(new Date());
+  $("dateLabel").textContent = `${d.getMonth() + 1}월 ${d.getDate()}일 (${WD[d.getDay()]})${isToday ? " · 오늘" : ""}`;
+  $("dayTitle").textContent = isToday ? "오늘 먹은 것" : `${d.getMonth() + 1}월 ${d.getDate()}일에 먹은 것`;
+}
+function renderWeek() {
+  const html = [];
+  for (let i = 6; i >= 0; i--) {
+    const ds = shift(state.date, -i);
+    const d = parseYmd(ds);
+    const meals = ds === state.date ? state.meals : state.days[ds];
+    const all = meals ? [...meals.breakfast, ...meals.lunch, ...meals.dinner] : [];
+    const t = sumItems(all);
+    const bars = NUT.map((n) => {
+      const pct = all.length ? Math.min((t[n.key] / (n.lo * 3)) * 100, 100) : 0;
+      return `<i><b style="height:${pct}%;background:${NUT_COLOR[n.key]}"></b></i>`;
+    }).join("");
+    html.push(`<button class="day" data-date="${ds}" ${ds === state.date ? 'aria-current="date"' : ""} aria-label="${d.getMonth() + 1}월 ${d.getDate()}일">
+      <span class="wd">${WD[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="minibars">${bars}</span></button>`);
+  }
+  $("week").innerHTML = html.join("");
+}
+function renderLedger() {
+  const all = [...state.meals.breakfast, ...state.meals.lunch, ...state.meals.dinner];
+  const t = sumItems(all);
+  $("dayBars").innerHTML = NUT.map((n) => barHTML(n, t[n.key], n.lo * 3, n.hi * 3, all.length > 0)).join("");
+  const remainingMeals = MEALS.filter((m) => state.meals[m.key].length === 0);
+  const rows = NUT.map((n) => ({ n, need: Math.max(0, n.lo * 3 - t[n.key]), over: !n.overOk && t[n.key] > n.hi * 3 }));
+  let text;
+  if (!all.length) text = "아직 기록이 없어요. 검색하거나 위의 아침 단골을 눌러 시작하세요.";
+  else if (rows.every((r) => r.need === 0)) text = "하루 목표를 모두 채웠어요.";
+  else if (remainingMeals.length) text = `비어 있는 ${remainingMeals.map((m) => m.label).join("·")}에서 아래만큼 더 채우면 돼요.`;
+  else text = "세 끼를 모두 기록했어요. 하루 목표까지 남은 양이에요.";
+  $("needText").textContent = text;
+  const div = Math.max(remainingMeals.length, 1);
+  $("needRow").innerHTML = rows.map((r) => `<div class="needcell ${r.need === 0 ? "done" : ""}">
+      <div class="k" style="color:${NUT_COLOR[r.n.key]}">${r.n.label}</div>
+      <div class="v">${r.need === 0 ? (r.over ? "초과" : "완료") : "+" + fmt(r.need) + "g"}</div>
+      ${r.need > 0 && remainingMeals.length > 1 ? `<div class="k num">끼니당 ${fmt(r.need / div)}g</div>` : ""}
+    </div>`).join("");
+}
+function renderMeals() {
+  $("meals").innerHTML = MEALS.map((m) => {
+    const items = state.meals[m.key];
+    const t = sumItems(items);
+    const list = items.length
+      ? `<ul class="items">${items.map((it) => `<li class="item" data-meal="${m.key}" data-id="${it.id}">
+          <span class="nm">${esc(it.n)} <span class="serv">${esc(it.s)}</span></span>
+          <span class="ctrl">
+            <button data-act="dec" aria-label="${esc(it.n)} 줄이기">−</button>
+            ${it.g
+              ? `<label class="gwrap"><input class="gin num" type="number" min="0" step="1" inputmode="numeric" value="${Math.round(it.g * it.qty)}" aria-label="${esc(it.n)} 그램"><span>g</span></label>`
+              : `<span class="q">×${fmt(it.qty)}</span>`}
+            <button data-act="inc" aria-label="${esc(it.n)} 늘리기">+</button>
+            <button class="rm" data-act="rm" aria-label="${esc(it.n)} 빼기">×</button>
+          </span>
+          ${macroHTML(it, it.qty)}
+        </li>`).join("")}</ul>`
+      : `<div class="emptymeal">${m.key === "breakfast" ? "아침 단골을 누르거나 검색해서 담아요" : "검색 결과에서 “" + m.label + "”을 눌러 담아요"}</div>`;
+    const note = m.key === "breakfast" && items.length && t.p < 25
+      ? `<p class="mealnote">아침은 가볍게. 부족한 단백질 ${fmt(25 - t.p)}g은 점심·저녁으로 넘겨요.</p>` : "";
+    return `<article class="meal">
+      <header><h2>${m.label}</h2><span class="goal num">${fmt(t.p)} · ${fmt(t.f)} · ${fmt(t.b)} g</span></header>
+      ${list}
+      <div class="bars">${NUT.map((n) => barHTML(n, t[n.key], n.lo, n.hi, items.length > 0)).join("")}</div>
+      ${note}
+    </article>`;
+  }).join("");
+}
+function renderQuick() {
+  const favs = FOODS.filter((f) => f.fav);
+  $("quick").innerHTML = `<span class="lbl">아침 단골 →</span>` +
+    favs.map((f, i) => `<button class="chip" data-fav="${i}">+ ${esc(f.n)}</button>`).join("");
+}
+const allFoods = () => [...state.custom.map((c) => ({ ...c, custom: true })), ...FOODS];
+function renderResults() {
+  const q = $("q").value.trim().toLowerCase().replace(/\s+/g, "");
+  const box = $("results");
+  if (!q && !state.showCustom) { box.hidden = true; box.innerHTML = ""; return; }
+  const hits = q ? allFoods().filter((f) => (f.n + f.k).toLowerCase().replace(/\s+/g, "").includes(q)).slice(0, 8) : [];
+  const rows = hits.map((f, i) => `<div class="res">
+      <div style="min-width:0"><div class="name">${esc(f.n)} <span class="serv">${esc(f.s)}${f.custom ? " · 직접 추가" : ""}</span></div>${macroLabeled(f)}</div>
+      <div class="addto">${MEALS.map((m) => `<button data-add="${i}" data-meal="${m.key}">${m.label}</button>`).join("")}</div>
+    </div>`).join("");
+  const none = q && !hits.length ? `<div class="empty-res">“${esc($("q").value.trim())}”은 목록에 없어요. <button class="linkbtn" id="openCustom">영양성분 직접 입력하기</button></div>` : "";
+  const more = hits.length && !state.showCustom ? `<div class="empty-res">찾는 게 없나요? <button class="linkbtn" id="openCustom">직접 입력하기</button></div>` : "";
+  const form = state.showCustom ? `<form class="custom" id="customForm">
+      <label class="wide">음식 이름<input id="cName" required value="${esc($("q").value.trim())}"></label>
+      <label class="wide">1회 제공량<input id="cServ" placeholder="예: 1팩"></label>
+      <label>무게 g<input id="cG" type="number" step="1" min="0" inputmode="numeric" placeholder="예: 150"></label>
+      <label>단백질 g<input id="cP" type="number" step="0.1" min="0" inputmode="decimal" required></label>
+      <label>지방 g<input id="cF" type="number" step="0.1" min="0" inputmode="decimal" required></label>
+      <label>식이섬유 g<input id="cB" type="number" step="0.1" min="0" inputmode="decimal" required></label>
+      <div class="row"><span class="hint">영양성분표의 "총 내용량 ○g당" 값을 넣으세요. 무게를 넣으면 g 단위로 조절돼요.</span>
+        <span class="addto">${MEALS.map((m) => `<button type="submit" data-meal="${m.key}">${m.label}에 담기</button>`).join("")}</span></div>
+    </form>` : "";
+  box.innerHTML = rows + none + more + form;
+  box.hidden = false;
+  box._hits = hits;
+}
+function renderAll() { renderDate(); renderWeek(); renderLedger(); renderMeals(); renderResults(); }
+
+/* ---------- 동작 ---------- */
+function addFood(f, mealKey) {
+  state.meals[mealKey].push({ id: uid(), n: f.n, s: f.s, g: f.g || null, p: f.p, f: f.f, b: f.b, qty: 1 });
+  scheduleSave();
+  renderWeek(); renderLedger(); renderMeals();
+  toast(`${MEALS.find((m) => m.key === mealKey).label}에 ${f.n} 담았어요`);
+}
+async function goDate(ds) {
+  if (pendingSave) await flushSave();
+  state.date = ds;
+  state.meals = clone(state.days[ds]) || emptyMeals();
+  renderAll();
+}
+$("prevDay").onclick = () => goDate(shift(state.date, -1));
+$("nextDay").onclick = () => goDate(shift(state.date, 1));
+$("todayBtn").onclick = () => goDate(ymd(new Date()));
+$("week").onclick = (e) => { const b = e.target.closest(".day"); if (b) goDate(b.dataset.date); };
+$("quick").onclick = (e) => {
+  const b = e.target.closest("[data-fav]"); if (!b) return;
+  addFood(FOODS.filter((f) => f.fav)[+b.dataset.fav], "breakfast");
+};
+$("q").addEventListener("input", () => { state.showCustom = false; renderResults(); });
+$("q").addEventListener("keydown", (e) => { if (e.key === "Escape") { $("q").value = ""; state.showCustom = false; renderResults(); } });
+
+let submitMeal = "lunch";
+$("results").addEventListener("click", (e) => {
+  const sb = e.target.closest('button[type="submit"]'); if (sb) { submitMeal = sb.dataset.meal; return; }
+  if (e.target.id === "openCustom") { state.showCustom = true; renderResults(); const n = $("cName"); if (n && n.value) $("cP").focus(); else if (n) n.focus(); return; }
+  const b = e.target.closest("[data-add]");
+  if (b) addFood($("results")._hits[+b.dataset.add], b.dataset.meal);
+});
+$("results").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const num = (id) => Math.max(0, parseFloat($(id).value) || 0);
+  const g = Math.round(num("cG")) || null;
+  const serv = $("cServ").value.trim() || (g ? "" : "1회");
+  const s = g ? (serv ? `${serv} (${g}g)` : `${g}g`) : serv;
+  const f = { n: $("cName").value.trim(), s, g, p: num("cP"), f: num("cF"), b: num("cB"), k: "" };
+  if (!f.n) return;
+  state.custom = [f, ...state.custom.filter((c) => c.n !== f.n)];
+  try { await store.saveCustom(state.custom); } catch (err) { toast("직접 입력한 음식을 저장하지 못했어요."); }
+  state.showCustom = false;
+  $("q").value = "";
+  addFood(f, submitMeal);
+  renderResults();
+});
+$("meals").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const li = b.closest(".item");
+  const list = state.meals[li.dataset.meal];
+  const idx = list.findIndex((x) => x.id === li.dataset.id);
+  if (idx < 0) return;
+  const it = list[idx];
+  const act = b.dataset.act;
+  if (act === "rm") list.splice(idx, 1);
+  else if (it.g) {
+    // g 단위: 기준 무게가 100g 이상이면 10g씩, 작으면 5g씩
+    const step = it.g >= 100 ? 10 : 5;
+    const cur = Math.round(it.g * it.qty);
+    const next = act === "inc" ? Math.floor(cur / step) * step + step : Math.ceil(cur / step) * step - step;
+    if (next <= 0) list.splice(idx, 1); else it.qty = next / it.g;
+  } else if (act === "inc") it.qty = r1(it.qty + 0.5);
+  else if (it.qty > 0.5) it.qty = r1(it.qty - 0.5);
+  else list.splice(idx, 1);
+  scheduleSave();
+  renderWeek(); renderLedger(); renderMeals();
+});
+// g 직접 입력: 입력을 마치면(엔터·다른 곳 누르기) 반영
+$("meals").addEventListener("change", (e) => {
+  if (!e.target.classList.contains("gin")) return;
+  const li = e.target.closest(".item");
+  const list = state.meals[li.dataset.meal];
+  const idx = list.findIndex((x) => x.id === li.dataset.id);
+  if (idx < 0) return;
+  const grams = Math.max(0, parseFloat(e.target.value) || 0);
+  if (grams === 0) list.splice(idx, 1); else list[idx].qty = grams / list[idx].g;
+  scheduleSave();
+  renderWeek(); renderLedger(); renderMeals();
+});
+$("meals").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.classList.contains("gin")) e.target.blur(); });
+
+/* ---------- 다른 기기 연결 ---------- */
+const syncUrl = location.origin + location.pathname + "#" + CODE;
+let qrDrawn = false;
+$("syncBtn").onclick = () => {
+  const p = $("syncPanel");
+  p.hidden = !p.hidden;
+  $("syncLink").value = syncUrl;
+  if (!p.hidden && !qrDrawn && window.QRCode) {
+    new QRCode($("qr"), { text: syncUrl, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M });
+    qrDrawn = true;
+  }
+};
+$("copyLink").onclick = async () => {
+  try { await navigator.clipboard.writeText(syncUrl); toast("링크를 복사했어요"); }
+  catch (e) { $("syncLink").select(); toast("링크를 선택했어요. 길게 눌러 복사하세요"); }
+};
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 1800);
+}
+window.addEventListener("pagehide", () => { if (pendingSave) flushSave(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && pendingSave) flushSave(); });
+
+renderQuick();
+renderAll();
+initStore();
+</script>
+</body>
+</html>
